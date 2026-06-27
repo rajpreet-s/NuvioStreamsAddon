@@ -1,0 +1,24 @@
+[addon.js] VidZee provider fetching enabled: false
+[addon.js] MP4Hydra provider fetching enabled: false
+[addon.js] UHDMovies provider fetching enabled: false
+[addon.js] MoviesMod provider fetching enabled: false
+[addon.js] TopMovies provider fetching enabled: false
+[addon.js] SoaperTV provider fetching enabled: false
+[addon.js] MoviesDrive provider fetching enabled: false
+[addon.js] 4KHDHub provider fetching enabled: true
+[addon.js] HDHub4u provider fetching enabled: false
+[addon.js] Vixsrc provider fetching enabled: false
+[addon.js] MovieBox provider fetching enabled: false
+[addon.js] External providers: disabled
+[addon.js] All providers will use local implementations
+[addon.js] Stream links caching disabled
+[addon.js] Redis caching not available
+[TopMovies] No proxy configured
+[TopMovies] URL validation is enabled.
+[Analytics] GA4 Measurement Protocol is disabled. Set GA_MEASUREMENT_ID and GA_API_SECRET to enable.
+Using proxy/direct mode with Showbox.js
+Nuvio Streams Addon landing page available at http://localhost:7777
+Default Addon Manifest available at: http://localhost:7777/manifest.json
+To generate a personalized manifest, append ?cookie=YOUR_URL_ENCODED_COOKIE to the manifest URL.
+Example: http://localhost:7777/manifest.json?cookie=ui%3Dyourcookievalue
+Install example: stremio://localhost:7777/manifest.json?cookie=ui%3Dyourcookievalue

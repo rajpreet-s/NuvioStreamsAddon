@@ -146,11 +146,13 @@ async function resolveRedirectUrl(redirectUrl) {
     }
 
     const redirectHtml = await fetchText(redirectUrl);
-    if (!redirectHtml) return null;
+    if (!redirectHtml) return redirectUrl;
 
     try {
         const redirectDataMatch = redirectHtml.match(/'o','(.*?)'/);
-        if (!redirectDataMatch) return null;
+        if (!redirectDataMatch) {
+            return redirectUrl;
+        }
 
         // JSON.parse(atob(rot13Cipher(atob(atob(redirectDataMatch[1] as string)))))
         const step1 = atob(redirectDataMatch[1]);
@@ -169,7 +171,7 @@ async function resolveRedirectUrl(redirectUrl) {
     } catch (e) {
         console.error(`[4KHDHub] Error resolving redirect: ${e.message}`);
     }
-    return null;
+    return redirectUrl;
 }
 
 async function extractSourceResults($, el) {
@@ -267,10 +269,12 @@ async function extractHubCloud(hubCloudUrl, baseMeta) {
         title: titleText || baseMeta.title
     };
 
+    log(`[4KHDHub] Current meta: ${JSON.stringify(currentMeta)}`);
+
     // FSL Links
     $('a').each((_i, el) => {
         const text = $(el).text();
-        const href = $(el).attr('href');
+        let href = $(el).attr('href');
         if (!href) return;
 
         if (text.includes('FSL') || text.includes('Download File')) {
@@ -280,7 +284,17 @@ async function extractHubCloud(hubCloudUrl, baseMeta) {
                 meta: currentMeta
             });
         }
-        else if (text.includes('PixelServer')) {
+        else if (text.includes('PixelServer') || text.includes('10Gbps') || (href && href.includes('pixel.hubcloud'))) {
+            // Check if there is a script overriding this link
+            $('script').each((_j, scriptEl) => {
+                const scriptText = $(scriptEl).html() || '';
+                const pxlMatch = scriptText.match(/var pxl\s*=\s*["'](https?:\/\/[^"']+)["']/i);
+                if (pxlMatch && pxlMatch[1]) {
+                    href = pxlMatch[1];
+                    log(`[4KHDHub] Found JavaScript-overridden PixelServer URL: ${href}`);
+                }
+            });
+
             const pixelUrl = href.replace('/u/', '/api/file/');
             results.push({
                 source: 'PixelServer',
@@ -340,35 +354,54 @@ async function get4KHDHubStreams(tmdbId, type, season = null, episode = null) {
         });
     }
 
-    log(`[4KHDHub] Processing ${itemsToProcess.length} items`);
+    log(`[4KHDHub] Processing ${itemsToProcess.length} items concurrently`);
 
-    const streams = [];
-
-    for (const item of itemsToProcess) {
+    // 1. Map each item directly to an asynchronous execution promise
+    const streamPromises = itemsToProcess.map(async (item) => {
+        const localStreams = [];
         try {
             const sourceResult = await extractSourceResults($, item);
             if (sourceResult && sourceResult.url) {
-                log(`[4KHDHub] Extracting from HubCloud: ${sourceResult.url}`);
+                log(`[4KHDHub] Launching extraction for HubCloud: ${sourceResult.url}`);
+                
+                // Fetch links concurrently for this specific item
                 const extractedLinks = await extractHubCloud(sourceResult.url, sourceResult.meta);
 
                 for (const link of extractedLinks) {
-                    streams.push({
+                    localStreams.push({
                         name: `4KHDHub - ${link.source} ${sourceResult.meta.height ? sourceResult.meta.height + 'p' : ''}`,
                         title: `${link.meta.title}\n${bytes.format(link.meta.bytes || 0)}`,
                         url: link.url,
                         quality: sourceResult.meta.height ? `${sourceResult.meta.height}p` : undefined,
                         behaviorHints: {
-                            bingeGroup: `4khdhub-${link.source}`
+                            bingeGroup: `4khdhub-${link.source}`,
+                            notWebReady: true,
+                            ...(link.source === 'FSL' || link.source === 'PixelServer' ? {
+                                headers: {
+                                    Referer: 'https://gamerxyt.com/'
+                                },
+                                proxyHeaders: {
+                                    request: {
+                                        Referer: 'https://gamerxyt.com/',
+                                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                                    }
+                                }
+                            } : {})
                         }
                     });
                 }
             }
         } catch (err) {
-            console.error(`[4KHDHub] Item processing error: ${err.message}`);
+            console.error(`[4KHDHub] Individual item processing failed: ${err.message}`);
         }
-    }
+        return localStreams; // Return whatever links this specific item resolved
+    });
 
-    return streams;
+    // 2. Execute all extraction requests across the wire at the exact same time
+    const resolvedArrays = await Promise.all(streamPromises);
+
+    // 3. Flatten the arrays of arrays into a single clean list of streams
+    return resolvedArrays.flat();
 }
 
 module.exports = { get4KHDHubStreams };
